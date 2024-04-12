@@ -151,6 +151,9 @@ const (
 	compactionKindRead
 	compactionKindRewrite
 	compactionKindIngestedFlushable
+
+	// Periodic compaction picked by the Universal Compaction Picker
+	compactionKindUniversalPeriodic
 )
 
 func (k compactionKind) String() string {
@@ -359,6 +362,9 @@ func (c *compaction) makeInfo(jobID int) CompactionInfo {
 		Reason:      c.kind.String(),
 		Input:       make([]LevelInfo, 0, len(c.inputs)),
 		Annotations: []string{},
+	}
+	if c.isDownload {
+		info.Reason = "download," + info.Reason
 	}
 	for _, cl := range c.inputs {
 		inputInfo := LevelInfo{Level: cl.level, Tables: nil}
@@ -1520,7 +1526,7 @@ func (d *DB) runIngestFlush(c *compaction) (*manifest.VersionEdit, error) {
 			iter := overlaps.Iter()
 
 			for m := iter.First(); m != nil; m = iter.Next() {
-				newFiles, err := d.excise(ingestFlushable.exciseSpan, m, ve, l)
+				newFiles, err := d.excise(ingestFlushable.exciseSpan.UserKeyBounds(), m, ve, l)
 				if err != nil {
 					return nil, err
 				}
@@ -2626,6 +2632,13 @@ func (d *DB) runCopyCompaction(
 		if newMeta.SyntheticPrefix.IsSet() {
 			start.UserKey = newMeta.SyntheticPrefix.Invert(start.UserKey)
 			end.UserKey = newMeta.SyntheticPrefix.Invert(end.UserKey)
+		}
+		if newMeta.SyntheticSuffix.IsSet() {
+			// Extend the bounds as necessary so that the keys don't include suffixes.
+			start.UserKey = start.UserKey[:c.comparer.Split(start.UserKey)]
+			if n := c.comparer.Split(end.UserKey); n < len(end.UserKey) {
+				end = base.MakeRangeDeleteSentinelKey(c.comparer.ImmediateSuccessor(nil, end.UserKey[:n]))
+			}
 		}
 
 		wrote, err := sstable.CopySpan(ctx,

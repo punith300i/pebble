@@ -174,7 +174,7 @@ func (vs *versionSet) create(
 	vs.append(newVersion)
 	var err error
 
-	vs.picker = newCompactionPickerByScore(newVersion, &vs.virtualBackings, vs.opts, nil)
+	vs.picker = newCompactionPicker(newVersion, &vs.virtualBackings, vs.opts, nil)
 	// Note that a "snapshot" version edit is written to the manifest when it is
 	// created.
 	vs.manifestFileNum = vs.getNextDiskFileNum()
@@ -358,7 +358,7 @@ func (vs *versionSet) load(
 		vs.metrics.Table.Local.LiveSize = uint64(int64(vs.metrics.Table.Local.LiveSize) + localSize)
 	})
 
-	vs.picker = newCompactionPickerByScore(newVersion, &vs.virtualBackings, vs.opts, nil)
+	vs.picker = newCompactionPicker(newVersion, &vs.virtualBackings, vs.opts, nil)
 	return nil
 }
 
@@ -550,7 +550,7 @@ func (vs *versionSet) logAndApply(
 		defer vs.mu.Lock()
 
 		if vs.getFormatMajorVersion() < FormatVirtualSSTables && len(ve.CreatedBackingTables) > 0 {
-			return errors.AssertionFailedf("MANIFEST cannot contain virtual sstable records due to format major version")
+			return base.AssertionFailedf("MANIFEST cannot contain virtual sstable records due to format major version")
 		}
 		var b bulkVersionEdit
 		err := b.Accumulate(ve)
@@ -705,7 +705,7 @@ func (vs *versionSet) logAndApply(
 	vs.metrics.Levels[0].Sublevels = int32(len(newVersion.L0SublevelFiles))
 	vs.metrics.Table.Local.LiveSize = uint64(int64(vs.metrics.Table.Local.LiveSize) + localLiveSizeDelta)
 
-	vs.picker = newCompactionPickerByScore(newVersion, &vs.virtualBackings, vs.opts, inProgress)
+	vs.picker = newCompactionPicker(newVersion, &vs.virtualBackings, vs.opts, inProgress)
 	if !vs.dynamicBaseLevel {
 		vs.picker.forceBaseLevel1()
 	}
